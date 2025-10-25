@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-Based">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETF Depot Tracker</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        /* --- Color Variables --- */
+        :root {
+            --bg-color: #f4f7f6;
+            --bg-secondary-color: #ffffff;
+            --text-color: #333;
+            --text-heading-color: #2c3e50;
+            --border-color: #ddd;
+            --border-highlight-color: #ecf0f1;
+            --table-header-bg: #ecf0f1;
+            --table-header-text: #34495e;
+            --table-row-even-bg: #f9f9f9;
+            --summary-bg: #ecf0f1;
+            --summary-text: #34495e;
+            --summary-value-text: #2c3e50;
+            --tab-text: #7f8c8d;
+            --tab-active-text: #3498db;
+            --tab-active-border: #3498db;
+            --button-bg: #3498db;
+            --button-hover-bg: #2980b9;
+            /* Profit/Loss Colors */
+            --profit-color: #2ecc71;
+            --loss-color: #e74c3c;
+        }
+        
+        [data-theme="dark"] {
+            --bg-color: #1a1a1a;
+            --bg-secondary-color: #2c2c2c;
+            --text-color: #e0e0e0;
+            --text-heading-color: #f4f7f6;
+            --border-color: #444;
+            --border-highlight-color: #3a3a3a;
+            --table-header-bg: #3a3a3a;
+            --table-header-text: #e0e0e0;
+            --table-row-even-bg: #333;
+            --summary-bg: #3a3a3a;
+            --summary-text: #e0e0e0;
+            --summary-value-text: #f4f7f6;
+            --tab-text: #888;
+            --tab-active-text: #5dade2;
+            --tab-active-border: #5dade2;
+            --button-bg: #3498db;
+            --button-hover-bg: #5dade2;
+            /* Profit/Loss Colors */
+            --profit-color: #66BB6A; /* Slightly lighter green for dark mode */
+            --loss-color: #EF5350; /* Slightly lighter red for dark mode */
+        }
+        
+        /* --- Base Styling --- */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 10px;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+        
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 10px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .header-container h1 { font-size: 1.5em; }
+
+        h1, h2, h3 { color: var(--text-heading-color); }
+        h1, h2 { border-bottom: 2px solid var(--border-highlight-color); padding-bottom: 10px; }
+        
+        /* Grid Layout */
+        .container-grid {
+            display: grid;
+            grid-template-columns: 1fr 1.5fr;
+            gap: 20px;
+            max-width: 1400px;
+            margin: 20px auto;
+        }
+        .column {
+            background-color: var(--bg-secondary-color);
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            min-width: 0;
+            transition: background-color 0.2s ease;
+        }
+        @media (max-width: 1000px) { .container-grid { grid-template-columns: 1fr; } }
+        
+        /* Form Styling */
+        form { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px; }
+        #login-form, #register-form, #quick-login-form { grid-template-columns: 1fr; margin-bottom: 15px; }
+        @media (max-width: 600px) { #deposit-form, #snapshot-form { grid-template-columns: 1fr; } #live-check-form .form-group { grid-column: 1 / -1; } }
+        .form-group { display: flex; flex-direction: column; }
+        form label { font-weight: 600; margin-bottom: 5px; font-size: 0.9em; }
+        form input[type="date"], form input[type="text"], form input[type="username"], form input[type="password"] {
+            padding: 10px; border: 1px solid var(--border-color); border-radius: 5px; font-size: 1em;
+            background-color: var(--bg-secondary-color); color: var(--text-color);
+        }
+        form button, .choice-button {
+            grid-column: 1 / -1; padding: 12px; background-color: var(--button-bg); color: white;
+            border: none; border-radius: 5px; font-size: 1.1em; font-weight: 600; cursor: pointer; transition: background-color 0.3s ease;
+        }
+        form button:hover, .choice-button:hover { background-color: var(--button-hover-bg); }
+        
+        /* Total Deposits Summary */
+        #total-deposits-container {
+            background-color: var(--summary-bg); color: var(--summary-text); padding: 15px 20px;
+            border-radius: 8px; margin-bottom: 20px; text-align: center;
+        }
+        #total-deposits-container h3 { margin: 0; color: var(--summary-text); font-size: 1em; }
+        #total-deposits { font-size: 1.3em; font-weight: 700; color: var(--summary-value-text); }
+
+        /* Table Styling */
+        .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 20px; }
+        table { width: 100%; min-width: 500px; border-collapse: collapse; }
+        th, td { border: 1px solid var(--border-color); padding: 10px; text-align: left; vertical-align: middle; word-wrap: break-word; white-space: nowrap; }
+        th { background-color: var(--table-header-bg); color: var(--table-header-text); font-weight: 600; }
+        tbody tr:nth-child(even) { background-color: var(--table-row-even-bg); }
+        .profit { color: var(--profit-color); font-weight: 600; } /* Use CSS variable */
+        .loss { color: var(--loss-color); font-weight: 600; } /* Use CSS variable */
+        .delete-btn { padding: 5px 10px; background-color: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; }
+        .delete-btn:hover { background-color: #c0392b; }
+
+        /* Tab Styling */
+        .tab-nav { display: flex; border-bottom: 2px solid var(--border-highlight-color); margin-bottom: 20px; flex-wrap: wrap; }
+        .tab-button { padding: 10px 15px; border: none; background-color: transparent; font-size: 1em; font-weight: 600; color: var(--tab-text); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; }
+        .tab-button.active { color: var(--tab-active-text); border-bottom-color: var(--tab-active-border); }
+        .tab-content { display: none; } .tab-content.active { display: block; }
+        
+        /* Header Buttons */
+        .header-buttons { display: flex; gap: 10px; align-items: center; }
+        #theme-toggle, #logout-button {
+            padding: 8px 12px; font-size: 0.9em; font-weight: 600; border: 1px solid var(--border-color); border-radius: 5px;
+            background-color: var(--bg-secondary-color); color: var(--text-color); cursor: pointer; transition: background-color 0.2s ease, border-color 0.2s ease; white-space: nowrap;
+        }
+        #theme-toggle:hover, #logout-button:hover { background-color: var(--table-row-even-bg); }
+
+        /* Chart Containers */
+        .chart-section { /* NEW: Wrapper for each chart */
+            max-width: 1400px;
+            margin: 20px auto;
+            background-color: var(--bg-secondary-color);
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        .chart-container { /* Renamed */
+            position: relative;
+            height: 350px;
+        }
+         @media (min-width: 768px) { .chart-container { height: 400px; } }
+
+        /* --- Login Overlay --- */
+        #login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(5px); display: flex; justify-content: center; align-items: center; z-index: 1000; padding: 15px; box-sizing: border-box; }
+        .login-box { background-color: var(--bg-secondary-color); padding: 20px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); width: 100%; max-width: 400px; text-align: center; overflow: hidden; }
+        .login-box h2 { margin-top: 0; border-bottom: none; }
+        .login-box p.warning { font-size: 0.9em; color: #e74c3c; font-weight: 600; margin-bottom: 20px; }
+        .login-box span { font-size: 0.8em; color: var(--tab-text); margin-bottom: 20px; display: block; }
+        #initial-choice-view { display: flex; flex-direction: column; gap: 15px; }
+        .back-btn, #switch-user-btn { background: transparent; border: none; color: var(--tab-text); cursor: pointer; font-size: 0.9em; margin-top: 10px; }
+        .back-btn:hover, #switch-user-btn:hover { color: var(--tab-active-text); }
+
+        #main-content { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="login-overlay">
+         <div class="login-box">
+             <div id="initial-choice-view" style="display: none;"><h2>Welcome</h2><button id="show-login-btn" class="choice-button">Login</button><button id="show-register-btn" class="choice-button">Register</button></div>
+             <div id="login-view" style="display: none;"><h2>Login</h2><form id="login-form"><div class="form-group"><label for="login-username">Username:</label><input type="username" id="login-username" required></div><div class="form-group"><label for="login-password">Password:</label><input type="password" id="login-password" required></div><button type="submit">Login</button></form><button class="back-btn" data-target="initial-choice-view">Back</button></div>
+             <div id="register-view" style="display: none;"><h2>Register</h2><p class="warning">WARNING: This is NOT secure. Your password is saved in plain text. Do not use a real password!</p><form id="register-form"><div class="form-group"><label for="register-username">Username:</label><input type="username" id="register-username" required></div><div class="form-group"><label for="register-password">Password:</label><input type="password" id="register-password" required></div><button type="submit">Register</button></form><button class="back-btn" data-target="initial-choice-view">Back</button></div>
+             <div id="quick-login-view" style="display: none;"><h2>Welcome Back, <span id="quick-login-username"></span>!</h2><form id="quick-login-form"><div class="form-group"><label for="quick-login-password">Password:</label><input type="password" id="quick-login-password" required></div><button type="submit">Login</button></form><button id="switch-user-btn">Switch User</button></div>
+         </div>
+    </div>
+    
+    <div id="main-content">
+        <div class="header-container">
+             <h1>My ETF Depot Tracker</h1>
+             <div class="header-buttons">
+                 <span id="welcome-message" style="align-self: center; margin-right: 15px; color: var(--tab-text);"></span>
+                 <button id="theme-toggle">Toggle Theme</button>
+                 <button id="logout-button">Logout</button>
+             </div>
+        </div>
+    
+        <div class="container-grid">
+            <div class="column">
+                <h2>Deposits</h2>
+                <form id="deposit-form"><div class="form-group"><label for="deposit-date">Date:</label><input type="date" id="deposit-date" required></div><div class="form-group"><label for="deposit-amount">Deposit (€):</label><input type="text" inputmode="decimal" id="deposit-amount" placeholder="200,00" required></div><button type="submit">Add Deposit</button></form>
+                <div id="total-deposits-container"><h3>Total Deposits:</h3><span id="total-deposits">0.00 €</span></div>
+                <div class="table-container"><table id="deposit-table"><thead><tr><th>Date</th><th>Deposit</th><th>Action</th></tr></thead><tbody id="deposit-table-body"></tbody></table></div>
+            </div>
+    
+            <div class="column">
+                <div class="tab-nav"><button class="tab-button active" data-tab="snapshots">Performance</button><button class="tab-button" data-tab="monthly">Monthly</button><button class="tab-button" data-tab="yearly">Yearly</button><button class="tab-button" data-tab="live">Live Check</button></div>
+                <div id="tab-snapshots" class="tab-content active"><h2>Performance Snapshots</h2><form id="snapshot-form"><div class="form-group"><label for="snapshot-date">Date:</label><input type="date" id="snapshot-date" required></div><div class="form-group"><label for="snapshot-value">Portfolio Value (€):</label><input type="text" inputmode="decimal" id="snapshot-value" placeholder="7853,00" required></div><button type="submit">Add Performance Snapshot</button></form><div class="table-container"><table id="snapshot-table"><thead><tr><th>Date</th><th>Portf. Value</th><th>Deposits</th><th>P/L (€)</th><th>P/L (%)</th><th>Action</th></tr></thead><tbody id="snapshot-table-body"></tbody></table></div></div>
+                <div id="tab-monthly" class="tab-content"><h2>Monthly Performance</h2><div class="table-container"><table id="monthly-performance-table"><thead><tr><th>Period</th><th>Gain/Loss (€)</th><th>Return (%)</th></tr></thead><tbody id="monthly-performance-body"></tbody></table></div></div>
+                <div id="tab-yearly" class="tab-content"><h2>Yearly Performance</h2><div class="table-container"><table id="yearly-performance-table"><thead><tr><th>Year</th><th>Start Value</th><th>End Value</th><th>Deposits</th><th>Gain/Loss (€)</th><th>Return (%)</th></tr></thead><tbody id="yearly-performance-body"></tbody></table></div></div>
+                <div id="tab-live" class="tab-content"><h2>Live Performance Check</h2><p style="font-size: 0.9em; color: var(--tab-text);">This is a quick calculator. Data entered here is <strong>not</strong> saved or logged.</p><form id="live-check-form"><div class="form-group" style="grid-column: 1 / -1;"><label for="live-value">Current Portfolio Value (€):</label><input type="text" inputmode="decimal" id="live-value" placeholder="8000,00" required></div><button type="submit">Calculate Live P/L</button></form><div id="live-results-container" style="display: none; margin-top: 20px; padding: 15px; background-color: var(--summary-bg); border-radius: 8px;"><h3>Live Results:</h3><p style="font-size: 1.1em;"><strong>Total Deposits:</strong> <span id="live-total-deposits">0.00 €</span></p><p style="font-size: 1.1em;"><strong>Gain/Loss (€):</strong> <span id="live-pl-euro">0.00 €</span></p><p style="font-size: 1.1em;"><strong>Gain/Loss (%):</strong> <span id="live-pl-percent">0.0%</span></p></div></div>
+            </div>
+        </div>
+        
+        <div class="chart-section">
+            <h2>Portfolio Value (€)</h2>
+            <div class="chart-container">
+                <canvas id="performance-chart"></canvas>
+            </div>
+        </div>
+        
+        <div class="chart-section">
+            <h2>Profit / Loss (€) vs Deposits</h2>
+            <div class="chart-container">
+                <canvas id="profit-loss-chart"></canvas> </div>
+        </div>
+    </div>
+
+
+    <script>
+        // --- User & Storage Keys ---
+        let currentUsername = null;
+        const LAST_USER_KEY = 'etfTrackerLastUser'; 
+        
+        const getPasswordKey = (user) => `etfTrackerPass_${user}`;
+        const getDepositsKey = () => `etfDeposits_${currentUsername}`;
+        const getSnapshotsKey = () => `etfSnapshots_${currentUsername}`;
+        const getThemeKey = () => `etfTrackerTheme_${currentUsername}`;
+        
+        // --- DOM ELEMENTS ---
+        const loginOverlay = document.getElementById('login-overlay');
+        const mainContent = document.getElementById('main-content');
+        const initialChoiceView = document.getElementById('initial-choice-view');
+        const loginView = document.getElementById('login-view');
+        const registerView = document.getElementById('register-view');
+        const quickLoginView = document.getElementById('quick-login-view');
+        const showLoginBtn = document.getElementById('show-login-btn');
+        const showRegisterBtn = document.getElementById('show-register-btn');
+        const backBtns = document.querySelectorAll('.back-btn');
+        const switchUserBtn = document.getElementById('switch-user-btn');
+        const loginForm = document.getElementById('login-form');
+        const loginUsernameInput = document.getElementById('login-username');
+        const loginPasswordInput = document.getElementById('login-password');
+        const registerForm = document.getElementById('register-form');
+        const registerUsernameInput = document.getElementById('register-username');
+        const registerPasswordInput = document.getElementById('register-password');
+        const quickLoginForm = document.getElementById('quick-login-form');
+        const quickLoginPasswordInput = document.getElementById('quick-login-password');
+        const quickLoginUsernameSpan = document.getElementById('quick-login-username');
+        const welcomeMessage = document.getElementById('welcome-message');
+        const logoutButton = document.getElementById('logout-button');
+        const depositForm = document.getElementById('deposit-form');
+        const depositTableBody = document.getElementById('deposit-table-body');
+        const totalDepositsSpan = document.getElementById('total-deposits');
+        const snapshotForm = document.getElementById('snapshot-form');
+        const snapshotTableBody = document.getElementById('snapshot-table-body');
+        const tabNav = document.querySelector('.tab-nav');
+        const tabContents = document.querySelectorAll('.tab-content');
+        const monthlyPerformanceBody = document.getElementById('monthly-performance-body');
+        const yearlyPerformanceBody = document.getElementById('yearly-performance-body');
+        const themeToggle = document.getElementById('theme-toggle');
+        const htmlElement = document.documentElement;
+        
+        // --- Chart Variables ---
+        let performanceChart = null; // Renamed from myChart
+        let plChart = null; // NEW variable for the P/L chart
+
+        const liveCheckForm = document.getElementById('live-check-form');
+        const liveValueInput = document.getElementById('live-value');
+        const liveResultsContainer = document.getElementById('live-results-container');
+        const liveTotalDeposits = document.getElementById('live-total-deposits');
+        const livePlEuro = document.getElementById('live-pl-euro');
+        const livePlPercent = document.getElementById('live-pl-percent');
+
+
+        // --- UTILITY FUNCTIONS ---
+        function formatDate(dateString) { if (!dateString) return ''; const date = new Date(dateString); return date.toLocaleDateString('en-US'); }
+        function formatMonthYear(dateString) { if (!dateString) return ''; const date = new Date(dateString); return date.toLocaleString('en-US', { month: 'short', year: 'numeric' }); }
+        function setDefaultDates() { const today = new Date().toISOString().split('T')[0]; document.getElementById('deposit-date').value = today; document.getElementById('snapshot-date').value = today; }
+        function getData(key) { const data = localStorage.getItem(key); return data ? JSON.parse(data) : []; }
+        function saveData(key, data) { localStorage.setItem(key, JSON.stringify(data)); }
+
+        // --- DEPOSIT FUNCTIONS ---
+        function loadDeposits() { depositTableBody.innerHTML = ''; const deposits = getData(getDepositsKey()); deposits.sort((a, b) => new Date(a.date) - new Date(b.date)).forEach(addDepositToDOM); updateDepositSummary(); }
+        function addDepositToDOM(deposit) { const row = document.createElement('tr'); row.setAttribute('data-id', deposit.id); row.innerHTML = `<td>${formatDate(deposit.date)}</td><td>${deposit.amount.toFixed(2)} €</td><td><button class="delete-btn deposit-delete">Delete</button></td>`; depositTableBody.appendChild(row); }
+        function handleDepositSubmit(e) { e.preventDefault(); const date = document.getElementById('deposit-date').value; const amountString = document.getElementById('deposit-amount').value; const amount = parseFloat(amountString.replace(',', '.')); if (!date || isNaN(amount) || amount <= 0) return alert('Please enter a valid date and amount.'); const newDeposit = { id: Date.now(), date, amount }; const deposits = getData(getDepositsKey()); deposits.push(newDeposit); saveData(getDepositsKey(), deposits); loadDeposits(); refreshAllPerformanceTables(); depositForm.reset(); setDefaultDates(); }
+        function handleDeleteDeposit(e) { if (!e.target.classList.contains('deposit-delete')) return; const row = e.target.closest('tr'); const idToDelete = parseInt(row.getAttribute('data-id')); let deposits = getData(getDepositsKey()); deposits = deposits.filter(d => d.id !== idToDelete); saveData(getDepositsKey(), deposits); row.remove(); updateDepositSummary(); refreshAllPerformanceTables(); }
+        function updateDepositSummary() { const deposits = getData(getDepositsKey()); const total = deposits.reduce((sum, d) => sum + d.amount, 0); totalDepositsSpan.textContent = `${total.toFixed(2)} €`; }
+
+        // --- PERFORMANCE SNAPSHOT FUNCTIONS ---
+        // *** UPDATED: Now calculates data for both charts ***
+        function refreshAllPerformanceTables() {
+            const snapshots = getData(getSnapshotsKey()).sort((a, b) => new Date(a.date) - new Date(b.date));
+            const deposits = getData(getDepositsKey());
+
+            loadSnapshotTable(snapshots, deposits);
+            loadMonthlyPerformance(snapshots, deposits);
+            loadYearlyPerformance(snapshots, deposits);
+            
+            // --- Data for Chart 1: Portfolio Value ---
+            const chartLabels = snapshots.map(s => formatDate(s.date));
+            const portfolioValueData = snapshots.map(s => s.portfolioValue);
+            renderPerformanceChart(chartLabels, portfolioValueData); // Renamed function call
+
+            // --- Data for Chart 2: P/L Value and Colors ---
+            const plData = [];
+            const plColors = [];
+            const profitColor = getComputedStyle(document.documentElement).getPropertyValue('--profit-color').trim(); // Get color from CSS var
+            const lossColor = getComputedStyle(document.documentElement).getPropertyValue('--loss-color').trim(); // Get color from CSS var
+
+            snapshots.forEach(snapshot => {
+                const totalDeposits = getTotalDepositsUpTo(snapshot.date, deposits);
+                const pl = snapshot.portfolioValue - totalDeposits;
+                plData.push(pl);
+                plColors.push(pl >= 0 ? profitColor : lossColor);
+            });
+            renderProfitLossChart(chartLabels, plData, plColors); // NEW function call
+        }
+        function loadSnapshotTable(snapshots, deposits) { snapshotTableBody.innerHTML = ''; snapshots.forEach(snapshot => addSnapshotToDOM(snapshot, deposits)); }
+        function getTotalDepositsUpTo(snapshotDate, deposits) { const snapshotTime = new Date(snapshotDate).getTime(); return deposits.filter(d => new Date(d.date).getTime() <= snapshotTime).reduce((sum, d) => sum + d.amount, 0); }
+        function addSnapshotToDOM(snapshot, deposits) { const totalDeposits = getTotalDepositsUpTo(snapshot.date, deposits); const pl = snapshot.portfolioValue - totalDeposits; const plPercent = (totalDeposits === 0) ? 0 : (pl / totalDeposits) * 100; const plClass = pl >= 0 ? 'profit' : 'loss'; const plSign = pl >= 0 ? '+' : ''; const row = document.createElement('tr'); row.setAttribute('data-id', snapshot.id); row.innerHTML = `<td>${formatDate(snapshot.date)}</td><td>${snapshot.portfolioValue.toFixed(2)} €</td><td>${totalDeposits.toFixed(2)} €</td><td class="${plClass}">${plSign}${pl.toFixed(2)} €</td><td class="${plClass}">${plSign}${plPercent.toFixed(2)}%</td><td><button class="delete-btn snapshot-delete">Delete</button></td>`; snapshotTableBody.appendChild(row); }
+        function handleSnapshotSubmit(e) { e.preventDefault(); const date = document.getElementById('snapshot-date').value; const valueString = document.getElementById('snapshot-value').value; const portfolioValue = parseFloat(valueString.replace(',', '.')); if (!date || isNaN(portfolioValue)) return alert('Please enter a valid date and portfolio value.'); const newSnapshot = { id: Date.now(), date, portfolioValue }; const snapshots = getData(getSnapshotsKey()); snapshots.push(newSnapshot); saveData(getSnapshotsKey(), snapshots); refreshAllPerformanceTables(); snapshotForm.reset(); setDefaultDates(); }
+        function handleDeleteSnapshot(e) { if (!e.target.classList.contains('snapshot-delete')) return; const row = e.target.closest('tr'); const idToDelete = parseInt(row.getAttribute('data-id')); let snapshots = getData(getSnapshotsKey()); snapshots = snapshots.filter(s => s.id !== idToDelete); saveData(getSnapshotsKey(), snapshots); refreshAllPerformanceTables(); }
+
+        // --- PERIODIC PERFORMANCE FUNCTIONS ---
+        function getDepositsBetween(startDate, endDate, allDeposits) { const startTime = startDate ? new Date(startDate).getTime() : 0; const endTime = new Date(endDate).getTime(); return allDeposits.filter(d => { const depositTime = new Date(d.date).getTime(); return depositTime > startTime && depositTime <= endTime; }).reduce((sum, d) => sum + d.amount, 0); }
+        function loadMonthlyPerformance(snapshots, deposits) { monthlyPerformanceBody.innerHTML = ''; for (let i = 0; i < snapshots.length; i++) { const currentSnapshot = snapshots[i]; const prevSnapshot = i === 0 ? null : snapshots[i - 1]; const startDate = prevSnapshot ? prevSnapshot.date : null; const endDate = currentSnapshot.date; const startValue = prevSnapshot ? prevSnapshot.portfolioValue : 0; const endValue = currentSnapshot.portfolioValue; const depositsDuringPeriod = getDepositsBetween(startDate, endDate, deposits); const gain = endValue - startValue - depositsDuringPeriod; const denominator = startValue + depositsDuringPeriod; const percent = (denominator === 0) ? 0 : (gain / denominator) * 100; const plClass = gain >= 0 ? 'profit' : 'loss'; const plSign = gain >= 0 ? '+' : ''; const row = document.createElement('tr'); const periodName = prevSnapshot ? `${formatMonthYear(startDate)} - ${formatMonthYear(endDate)}` : `Start - ${formatMonthYear(endDate)}`; row.innerHTML = `<td>${periodName}</td><td class="${plClass}">${plSign}${gain.toFixed(2)} €</td><td class="${plClass}">${plSign}${percent.toFixed(2)}%</td>`; monthlyPerformanceBody.appendChild(row); } }
+        function loadYearlyPerformance(snapshots, deposits) { yearlyPerformanceBody.innerHTML = ''; if (snapshots.length === 0) return; const snapshotsByYear = snapshots.reduce((acc, s) => { const year = new Date(s.date).getFullYear(); if (!acc[year]) acc[year] = []; acc[year].push(s); return acc; }, {}); const sortedYears = Object.keys(snapshotsByYear).sort(); let lastSnapshotOfPrevYear = null; for (const year of sortedYears) { const yearSnapshots = snapshotsByYear[year]; const lastSnapshotOfYear = yearSnapshots[yearSnapshots.length - 1]; const startValue = lastSnapshotOfPrevYear ? lastSnapshotOfPrevYear.portfolioValue : 0; const startDate = lastSnapshotOfPrevYear ? lastSnapshotOfPrevYear.date : null; const endValue = lastSnapshotOfYear.portfolioValue; const endDate = lastSnapshotOfYear.date; const depositsDuringPeriod = getDepositsBetween(startDate, endDate, deposits); const gain = endValue - startValue - depositsDuringPeriod; const denominator = startValue + depositsDuringPeriod; const percent = (denominator === 0) ? 0 : (gain / denominator) * 100; const plClass = gain >= 0 ? 'profit' : 'loss'; const plSign = gain >= 0 ? '+' : ''; const row = document.createElement('tr'); row.innerHTML = `<td>${year}</td><td>${startValue.toFixed(2)} €</td><td>${endValue.toFixed(2)} €</td><td>${depositsDuringPeriod.toFixed(2)} €</td><td class="${plClass}">${plSign}${gain.toFixed(2)} €</td><td class="${plClass}">${plSign}${percent.toFixed(2)}%</td>`; yearlyPerformanceBody.appendChild(row); lastSnapshotOfPrevYear = lastSnapshotOfYear; } }
+
+        // --- TAB SWITCHING LOGIC ---
+        tabNav.addEventListener('click', (e) => { if (e.target.classList.contains('tab-button')) { tabNav.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active')); tabContents.forEach(content => content.classList.remove('active')); const tabId = e.target.getAttribute('data-tab'); e.target.classList.add('active'); document.getElementById(`tab-${tabId}`).classList.add('active'); } });
+
+        // --- THEME TOGGLE LOGIC ---
+        // *** UPDATED: Now updates both charts ***
+        function applySavedTheme() {
+            const themeKey = currentUsername ? getThemeKey() : 'etfTrackerTheme_default';
+            const savedTheme = localStorage.getItem(themeKey);
+            if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                htmlElement.setAttribute('data-theme', 'dark');
+                if (themeToggle) themeToggle.textContent = 'Light Mode ☀️';
+            } else {
+                htmlElement.setAttribute('data-theme', 'light');
+                if (themeToggle) themeToggle.textContent = 'Dark Mode 🌙';
+            }
+        }
+        function handleThemeToggle() {
+            const currentTheme = htmlElement.getAttribute('data-theme') || 'light';
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            htmlElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem(getThemeKey(), newTheme);
+            themeToggle.textContent = newTheme === 'light' ? 'Dark Mode 🌙' : 'Light Mode ☀️';
+            
+            // Re-render charts ONLY if they exist (i.e., user is logged in)
+            if (performanceChart) {
+                refreshAllPerformanceTables(); // Easiest way to update both charts with new colors
+            }
+        }
+
+        // --- CHART.JS FUNCTIONS ---
+        // *** UPDATED: Split into two functions, added P/L chart ***
+        function getChartThemeColors() { // Renamed helper
+            const isDarkMode = htmlElement.getAttribute('data-theme') === 'dark';
+            return {
+                gridColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
+                textColor: isDarkMode ? '#e0e0e0' : '#333'
+            };
+        }
+
+        function renderPerformanceChart(labels, data) { // Renamed
+            const ctx = document.getElementById('performance-chart').getContext('2d');
+            const themeColors = getChartThemeColors(); // Use helper
+            
+            // Create gradient
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            const isDarkMode = htmlElement.getAttribute('data-theme') === 'dark';
+            if (isDarkMode) {
+                gradient.addColorStop(0, 'rgba(56, 173, 107, 0.4)'); gradient.addColorStop(1, 'rgba(56, 173, 107, 0.0)');
+            } else {
+                gradient.addColorStop(0, 'rgba(102, 187, 106, 0.4)'); gradient.addColorStop(1, 'rgba(102, 187, 106, 0.0)');
+            }
+            const lineColor = isDarkMode ? '#66BB6A' : '#4CAF50';
+            
+            if (performanceChart) { performanceChart.destroy(); }
+            
+            const chartType = data.length < 2 ? 'bar' : 'line';
+
+            performanceChart = new Chart(ctx, { // Use specific variable
+                type: chartType, data: { labels: labels, datasets: [{
+                    label: 'Portfolio Value (€)', data: data, fill: true, backgroundColor: gradient, borderColor: lineColor,
+                    borderWidth: 2, tension: 0.4, pointRadius: 6, pointBackgroundColor: lineColor, pointBorderColor: 'white',
+                    pointBorderWidth: 2, pointHoverRadius: 8 }]
+                }, options: { responsive: true, maintainAspectRatio: false, scales: {
+                    y: { beginAtZero: false, ticks: { color: themeColors.textColor }, grid: { color: themeColors.gridColor, drawBorder: false } },
+                    x: { ticks: { color: themeColors.textColor }, grid: { color: themeColors.gridColor, drawBorder: false } }
+                }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(context) {
+                    let label = context.dataset.label || ''; if (label) { label += ': '; }
+                    if (context.parsed.y !== null) { label += new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(context.parsed.y); }
+                    return label; } } } } }
+            });
+        }
+
+        // --- NEW: Function to render the P/L Bar Chart ---
+        function renderProfitLossChart(labels, data, colors) {
+             const ctx = document.getElementById('profit-loss-chart').getContext('2d');
+             const themeColors = getChartThemeColors(); // Use helper for grid/text colors
+             
+             if (plChart) { plChart.destroy(); } // Use specific variable
+
+             plChart = new Chart(ctx, { // Use specific variable
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Profit/Loss (€)',
+                        data: data,
+                        backgroundColor: colors, // Use the green/red color array
+                        borderColor: colors,     // Match border
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            // beginAtZero: false, // Allow negative axis
+                            ticks: { color: themeColors.textColor },
+                            grid: { 
+                                color: themeColors.gridColor,
+                                zeroLineColor: themeColors.textColor // Make the zero line more visible
+                            } 
+                        },
+                        x: {
+                            ticks: { color: themeColors.textColor },
+                            grid: { 
+                                display: false, // Hide vertical grid lines for bar chart
+                                drawBorder: false 
+                            } 
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }, // No legend needed
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) { label += ': '; }
+                                    if (context.parsed.y !== null) {
+                                        label += new Intl.NumberFormat('de-DE', { 
+                                            style: 'currency', 
+                                            currency: 'EUR',
+                                            signDisplay: 'always' // Always show + or -
+                                        }).format(context.parsed.y);
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+
+        // --- Live-Check Function ---
+        function handleLiveCheck(e) { e.preventDefault(); const valueString = liveValueInput.value; const liveValue = parseFloat(valueString.replace(',', '.')); if (isNaN(liveValue)) { alert('Please enter a valid value.'); return; } const deposits = getData(getDepositsKey()); const totalDeposits = deposits.reduce((sum, d) => sum + d.amount, 0); const pl = liveValue - totalDeposits; const plPercent = (totalDeposits === 0) ? 0 : (pl / totalDeposits) * 100; const plSign = pl >= 0 ? '+' : ''; liveTotalDeposits.textContent = `${totalDeposits.toFixed(2)} €`; livePlEuro.textContent = `${plSign}${pl.toFixed(2)} €`; livePlEuro.className = pl >= 0 ? 'profit' : 'loss'; livePlPercent.textContent = `${plSign}${plPercent.toFixed(2)}%`; livePlPercent.className = pl >= 0 ? 'profit' : 'loss'; liveResultsContainer.style.display = 'block'; }
+
+        // --- Login, Register, Logout, Navigation Functions ---
+        function showOverlayView(viewId) { initialChoiceView.style.display = 'none'; loginView.style.display = 'none'; registerView.style.display = 'none'; quickLoginView.style.display = 'none'; document.getElementById(viewId).style.display = 'block'; }
+        function handleLogin(e) { e.preventDefault(); const username = loginUsernameInput.value.trim(); const password = loginPasswordInput.value; if (!username || !password) return alert('Please enter username and password.'); const passwordKey = getPasswordKey(username); const savedPassword = localStorage.getItem(passwordKey); if (savedPassword === null) alert('User does not exist. Please register.'); else if (savedPassword === password) proceedToApp(username, password); else alert('Incorrect password.'); }
+        function handleRegister(e) { e.preventDefault(); const username = registerUsernameInput.value.trim(); const password = registerPasswordInput.value; if (!username || !password) return alert('Please enter username and password.'); const passwordKey = getPasswordKey(username); if (localStorage.getItem(passwordKey) !== null) { alert('Username already exists. Please login.'); } else { localStorage.setItem(passwordKey, password); alert('Registration successful! Logging you in...'); proceedToApp(username, password); } }
+        function handleQuickLogin(e) { e.preventDefault(); const lastUser = localStorage.getItem(LAST_USER_KEY); if (!lastUser) return showOverlayView('initial-choice-view'); const password = quickLoginPasswordInput.value; if (!password) return alert('Please enter password.'); const savedPassword = localStorage.getItem(getPasswordKey(lastUser)); if (savedPassword === password) { proceedToApp(lastUser, password); } else { alert('Incorrect password.'); } }
+        function proceedToApp(username, password) { currentUsername = username; localStorage.setItem(LAST_USER_KEY, username); loginOverlay.style.display = 'none'; mainContent.style.display = 'block'; welcomeMessage.textContent = `User: ${username}`; initializeApp(); }
+        function handleLogout() { location.reload(); } // Keep LAST_USER_KEY
+        function initializeApp() {
+            applySavedTheme(); setDefaultDates(); loadDeposits(); refreshAllPerformanceTables();
+            depositForm.addEventListener('submit', handleDepositSubmit); depositTableBody.addEventListener('click', handleDeleteDeposit);
+            snapshotForm.addEventListener('submit', handleSnapshotSubmit); snapshotTableBody.addEventListener('click', handleDeleteSnapshot);
+            liveCheckForm.addEventListener('submit', handleLiveCheck); themeToggle.addEventListener('click', handleThemeToggle); logoutButton.addEventListener('click', handleLogout);
+        }
+
+        // --- INITIAL LOAD LOGIC ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const lastUser = localStorage.getItem(LAST_USER_KEY);
+            loginOverlay.style.display = 'flex';
+            applySavedTheme(); 
+            if (lastUser) {
+                quickLoginUsernameSpan.textContent = lastUser; showOverlayView('quick-login-view');
+                quickLoginForm.addEventListener('submit', handleQuickLogin);
+                switchUserBtn.addEventListener('click', () => { showOverlayView('initial-choice-view'); });
+            } else { showOverlayView('initial-choice-view'); }
+            showLoginBtn.addEventListener('click', () => showOverlayView('login-view'));
+            showRegisterBtn.addEventListener('click', () => showOverlayView('register-view'));
+            backBtns.forEach(btn => { btn.addEventListener('click', () => showOverlayView('initial-choice-view')); });
+            loginForm.addEventListener('submit', handleLogin); registerForm.addEventListener('submit', handleRegister);
+        });
+        
+    </script>
+</body>
+</html>
