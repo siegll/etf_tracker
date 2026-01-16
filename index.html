@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-Based">
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ETF Depot Tracker</title>
     
@@ -275,18 +275,14 @@
 
 
         // --- UTILITY FUNCTIONS ---
-        // *** UPDATED formatDate ***
         function formatDate(dateString) { 
             if (!dateString) return ''; 
             const date = new Date(dateString); 
-            // Use 'de-DE' locale for dd.mm.yyyy format
             return date.toLocaleDateString('de-DE'); 
         }
         function formatMonthYear(dateString) { 
             if (!dateString) return ''; 
             const date = new Date(dateString); 
-            // Keep month/year format simple or use 'de-DE' if preferred
-            // return date.toLocaleString('en-US', { month: 'short', year: 'numeric' }); 
             return date.toLocaleString('de-DE', { month: 'short', year: 'numeric' });
         }
         function setDefaultDates() { const today = new Date().toISOString().split('T')[0]; document.getElementById('deposit-date').value = today; document.getElementById('snapshot-date').value = today; }
@@ -296,35 +292,81 @@
         // --- DEPOSIT FUNCTIONS ---
         function loadDeposits() { depositTableBody.innerHTML = ''; const deposits = getData(getDepositsKey()); deposits.sort((a, b) => new Date(a.date) - new Date(b.date)).forEach(addDepositToDOM); updateDepositSummary(); }
         function addDepositToDOM(deposit) { const row = document.createElement('tr'); row.setAttribute('data-id', deposit.id); row.innerHTML = `<td>${formatDate(deposit.date)}</td><td>${deposit.amount.toFixed(2)} €</td><td><button class="delete-btn deposit-delete">Delete</button></td>`; depositTableBody.appendChild(row); }
-        function handleDepositSubmit(e) { e.preventDefault(); const date = document.getElementById('deposit-date').value; const amountString = document.getElementById('deposit-amount').value; const amount = parseFloat(amountString.replace(',', '.')); if (!date || isNaN(amount) || amount <= 0) return alert('Please enter a valid date and amount.'); const newDeposit = { id: Date.now(), date, amount }; const deposits = getData(getDepositsKey()); deposits.push(newDeposit); saveData(getDepositsKey(), deposits); loadDeposits(); refreshAllPerformanceTables(); depositForm.reset(); setDefaultDates(); }
+        
+        function handleDepositSubmit(e) { 
+            e.preventDefault(); 
+            const date = document.getElementById('deposit-date').value; 
+            const amountString = document.getElementById('deposit-amount').value; 
+            const amount = parseFloat(amountString.replace(',', '.')); 
+            if (!date || isNaN(amount) || amount <= 0) return alert('Please enter a valid date and amount.'); 
+            const newDeposit = { id: Date.now(), date, amount }; 
+            const deposits = getData(getDepositsKey()); 
+            deposits.push(newDeposit); 
+            saveData(getDepositsKey(), deposits); 
+            loadDeposits(); 
+            refreshAllPerformanceTables(); 
+            depositForm.reset(); 
+            setDefaultDates(); 
+        }
+
         function handleDeleteDeposit(e) { if (!e.target.classList.contains('deposit-delete')) return; const row = e.target.closest('tr'); const idToDelete = parseInt(row.getAttribute('data-id')); let deposits = getData(getDepositsKey()); deposits = deposits.filter(d => d.id !== idToDelete); saveData(getDepositsKey(), deposits); row.remove(); updateDepositSummary(); refreshAllPerformanceTables(); }
         function updateDepositSummary() { const deposits = getData(getDepositsKey()); const total = deposits.reduce((sum, d) => sum + d.amount, 0); totalDepositsSpan.textContent = `${total.toFixed(2)} €`; }
 
         // --- PERFORMANCE SNAPSHOT FUNCTIONS ---
         function refreshAllPerformanceTables() {
-            const snapshots = getData(getSnapshotsKey()).sort((a, b) => new Date(a.date) - new Date(b.date));
-            const deposits = getData(getDepositsKey());
-            loadSnapshotTable(snapshots, deposits);
-            loadMonthlyPerformance(snapshots, deposits);
-            loadYearlyPerformance(snapshots, deposits);
-            const chartLabels = snapshots.map(s => formatDate(s.date)); // Uses updated formatDate
-            const portfolioValueData = snapshots.map(s => s.portfolioValue);
-            renderPerformanceChart(chartLabels, portfolioValueData);
-            const plData = []; const plColors = [];
-            const profitColor = getComputedStyle(document.documentElement).getPropertyValue('--profit-color').trim();
-            const lossColor = getComputedStyle(document.documentElement).getPropertyValue('--loss-color').trim();
-            snapshots.forEach(snapshot => { const totalDeposits = getTotalDepositsUpTo(snapshot.date, deposits); const pl = snapshot.portfolioValue - totalDeposits; plData.push(pl); plColors.push(pl >= 0 ? profitColor : lossColor); });
-            renderProfitLossChart(chartLabels, plData, plColors);
+            try {
+                const snapshots = getData(getSnapshotsKey()).sort((a, b) => new Date(a.date) - new Date(b.date));
+                const deposits = getData(getDepositsKey());
+                loadSnapshotTable(snapshots, deposits);
+                loadMonthlyPerformance(snapshots, deposits);
+                loadYearlyPerformance(snapshots, deposits);
+                
+                // Nur rendern, wenn Chart.js geladen ist
+                if (typeof Chart !== 'undefined') {
+                    const chartLabels = snapshots.map(s => formatDate(s.date)); 
+                    const portfolioValueData = snapshots.map(s => s.portfolioValue);
+                    renderPerformanceChart(chartLabels, portfolioValueData);
+                    
+                    const plData = []; const plColors = [];
+                    const profitColor = getComputedStyle(document.documentElement).getPropertyValue('--profit-color').trim();
+                    const lossColor = getComputedStyle(document.documentElement).getPropertyValue('--loss-color').trim();
+                    snapshots.forEach(snapshot => { 
+                        const totalDeposits = getTotalDepositsUpTo(snapshot.date, deposits); 
+                        const pl = snapshot.portfolioValue - totalDeposits; 
+                        plData.push(pl); 
+                        plColors.push(pl >= 0 ? profitColor : lossColor); 
+                    });
+                    renderProfitLossChart(chartLabels, plData, plColors);
+                }
+            } catch (error) {
+                console.error("Fehler beim Laden der Tabellen/Charts:", error);
+            }
         }
+
         function loadSnapshotTable(snapshots, deposits) { snapshotTableBody.innerHTML = ''; snapshots.forEach(snapshot => addSnapshotToDOM(snapshot, deposits)); }
         function getTotalDepositsUpTo(snapshotDate, deposits) { const snapshotTime = new Date(snapshotDate).getTime(); return deposits.filter(d => new Date(d.date).getTime() <= snapshotTime).reduce((sum, d) => sum + d.amount, 0); }
-        function addSnapshotToDOM(snapshot, deposits) { const totalDeposits = getTotalDepositsUpTo(snapshot.date, deposits); const pl = snapshot.portfolioValue - totalDeposits; const plPercent = (totalDeposits === 0) ? 0 : (pl / totalDeposits) * 100; const plClass = pl >= 0 ? 'profit' : 'loss'; const plSign = pl >= 0 ? '+' : ''; const row = document.createElement('tr'); row.setAttribute('data-id', snapshot.id); row.innerHTML = `<td>${formatDate(snapshot.date)}</td><td>${snapshot.portfolioValue.toFixed(2)} €</td><td>${totalDeposits.toFixed(2)} €</td><td class="${plClass}">${plSign}${pl.toFixed(2)} €</td><td class="${plClass}">${plSign}${plPercent.toFixed(2)}%</td><td><button class="delete-btn snapshot-delete">Delete</button></td>`; snapshotTableBody.appendChild(row); } // Uses updated formatDate
-        function handleSnapshotSubmit(e) { e.preventDefault(); const date = document.getElementById('snapshot-date').value; const valueString = document.getElementById('snapshot-value').value; const portfolioValue = parseFloat(valueString.replace(',', '.')); if (!date || isNaN(portfolioValue)) return alert('Please enter a valid date and portfolio value.'); const newSnapshot = { id: Date.now(), date, portfolioValue }; const snapshots = getData(getSnapshotsKey()); snapshots.push(newSnapshot); saveData(getSnapshotsKey(), snapshots); refreshAllPerformanceTables(); snapshotForm.reset(); setDefaultDates(); }
+        function addSnapshotToDOM(snapshot, deposits) { const totalDeposits = getTotalDepositsUpTo(snapshot.date, deposits); const pl = snapshot.portfolioValue - totalDeposits; const plPercent = (totalDeposits === 0) ? 0 : (pl / totalDeposits) * 100; const plClass = pl >= 0 ? 'profit' : 'loss'; const plSign = pl >= 0 ? '+' : ''; const row = document.createElement('tr'); row.setAttribute('data-id', snapshot.id); row.innerHTML = `<td>${formatDate(snapshot.date)}</td><td>${snapshot.portfolioValue.toFixed(2)} €</td><td>${totalDeposits.toFixed(2)} €</td><td class="${plClass}">${plSign}${pl.toFixed(2)} €</td><td class="${plClass}">${plSign}${plPercent.toFixed(2)}%</td><td><button class="delete-btn snapshot-delete">Delete</button></td>`; snapshotTableBody.appendChild(row); } 
+        
+        function handleSnapshotSubmit(e) { 
+            e.preventDefault(); 
+            const date = document.getElementById('snapshot-date').value; 
+            const valueString = document.getElementById('snapshot-value').value; 
+            const portfolioValue = parseFloat(valueString.replace(',', '.')); 
+            if (!date || isNaN(portfolioValue)) return alert('Please enter a valid date and portfolio value.'); 
+            const newSnapshot = { id: Date.now(), date, portfolioValue }; 
+            const snapshots = getData(getSnapshotsKey()); 
+            snapshots.push(newSnapshot); 
+            saveData(getSnapshotsKey(), snapshots); 
+            refreshAllPerformanceTables(); 
+            snapshotForm.reset(); 
+            setDefaultDates(); 
+        }
+
         function handleDeleteSnapshot(e) { if (!e.target.classList.contains('snapshot-delete')) return; const row = e.target.closest('tr'); const idToDelete = parseInt(row.getAttribute('data-id')); let snapshots = getData(getSnapshotsKey()); snapshots = snapshots.filter(s => s.id !== idToDelete); saveData(getSnapshotsKey(), snapshots); refreshAllPerformanceTables(); }
 
         // --- PERIODIC PERFORMANCE FUNCTIONS ---
         function getDepositsBetween(startDate, endDate, allDeposits) { const startTime = startDate ? new Date(startDate).getTime() : 0; const endTime = new Date(endDate).getTime(); return allDeposits.filter(d => { const depositTime = new Date(d.date).getTime(); return depositTime > startTime && depositTime <= endTime; }).reduce((sum, d) => sum + d.amount, 0); }
-        function loadMonthlyPerformance(snapshots, deposits) { monthlyPerformanceBody.innerHTML = ''; for (let i = 0; i < snapshots.length; i++) { const currentSnapshot = snapshots[i]; const prevSnapshot = i === 0 ? null : snapshots[i - 1]; const startDate = prevSnapshot ? prevSnapshot.date : null; const endDate = currentSnapshot.date; const startValue = prevSnapshot ? prevSnapshot.portfolioValue : 0; const endValue = currentSnapshot.portfolioValue; const depositsDuringPeriod = getDepositsBetween(startDate, endDate, deposits); const gain = endValue - startValue - depositsDuringPeriod; const denominator = startValue + depositsDuringPeriod; const percent = (denominator === 0) ? 0 : (gain / denominator) * 100; const plClass = gain >= 0 ? 'profit' : 'loss'; const plSign = gain >= 0 ? '+' : ''; const row = document.createElement('tr'); const periodName = prevSnapshot ? `${formatMonthYear(startDate)} - ${formatMonthYear(endDate)}` : `Start - ${formatMonthYear(endDate)}`; row.innerHTML = `<td>${periodName}</td><td class="${plClass}">${plSign}${gain.toFixed(2)} €</td><td class="${plClass}">${plSign}${percent.toFixed(2)}%</td>`; monthlyPerformanceBody.appendChild(row); } } // Uses updated formatMonthYear
+        function loadMonthlyPerformance(snapshots, deposits) { monthlyPerformanceBody.innerHTML = ''; for (let i = 0; i < snapshots.length; i++) { const currentSnapshot = snapshots[i]; const prevSnapshot = i === 0 ? null : snapshots[i - 1]; const startDate = prevSnapshot ? prevSnapshot.date : null; const endDate = currentSnapshot.date; const startValue = prevSnapshot ? prevSnapshot.portfolioValue : 0; const endValue = currentSnapshot.portfolioValue; const depositsDuringPeriod = getDepositsBetween(startDate, endDate, deposits); const gain = endValue - startValue - depositsDuringPeriod; const denominator = startValue + depositsDuringPeriod; const percent = (denominator === 0) ? 0 : (gain / denominator) * 100; const plClass = gain >= 0 ? 'profit' : 'loss'; const plSign = gain >= 0 ? '+' : ''; const row = document.createElement('tr'); const periodName = prevSnapshot ? `${formatMonthYear(startDate)} - ${formatMonthYear(endDate)}` : `Start - ${formatMonthYear(endDate)}`; row.innerHTML = `<td>${periodName}</td><td class="${plClass}">${plSign}${gain.toFixed(2)} €</td><td class="${plClass}">${plSign}${percent.toFixed(2)}%</td>`; monthlyPerformanceBody.appendChild(row); } } 
         function loadYearlyPerformance(snapshots, deposits) { yearlyPerformanceBody.innerHTML = ''; if (snapshots.length === 0) return; const snapshotsByYear = snapshots.reduce((acc, s) => { const year = new Date(s.date).getFullYear(); if (!acc[year]) acc[year] = []; acc[year].push(s); return acc; }, {}); const sortedYears = Object.keys(snapshotsByYear).sort(); let lastSnapshotOfPrevYear = null; for (const year of sortedYears) { const yearSnapshots = snapshotsByYear[year]; const lastSnapshotOfYear = yearSnapshots[yearSnapshots.length - 1]; const startValue = lastSnapshotOfPrevYear ? lastSnapshotOfPrevYear.portfolioValue : 0; const startDate = lastSnapshotOfPrevYear ? lastSnapshotOfPrevYear.date : null; const endValue = lastSnapshotOfYear.portfolioValue; const endDate = lastSnapshotOfYear.date; const depositsDuringPeriod = getDepositsBetween(startDate, endDate, deposits); const gain = endValue - startValue - depositsDuringPeriod; const denominator = startValue + depositsDuringPeriod; const percent = (denominator === 0) ? 0 : (gain / denominator) * 100; const plClass = gain >= 0 ? 'profit' : 'loss'; const plSign = gain >= 0 ? '+' : ''; const row = document.createElement('tr'); row.innerHTML = `<td>${year}</td><td>${startValue.toFixed(2)} €</td><td>${endValue.toFixed(2)} €</td><td>${depositsDuringPeriod.toFixed(2)} €</td><td class="${plClass}">${plSign}${gain.toFixed(2)} €</td><td class="${plClass}">${plSign}${percent.toFixed(2)}%</td>`; yearlyPerformanceBody.appendChild(row); lastSnapshotOfPrevYear = lastSnapshotOfYear; } }
 
         // --- TAB SWITCHING LOGIC ---
@@ -340,20 +382,46 @@
         function renderProfitLossChart(labels, data, colors) { const ctx = document.getElementById('profit-loss-chart').getContext('2d'); const themeColors = getChartThemeColors(); if (plChart) { plChart.destroy(); } plChart = new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ label: 'Profit/Loss (€)', data: data, backgroundColor: colors, borderColor: colors, borderWidth: 1 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { color: themeColors.textColor }, grid: { color: themeColors.gridColor, zeroLineColor: themeColors.textColor } }, x: { ticks: { color: themeColors.textColor }, grid: { display: false, drawBorder: false } } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(context) { let label = context.dataset.label || ''; if (label) { label += ': '; } if (context.parsed.y !== null) { label += new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', signDisplay: 'always' }).format(context.parsed.y); } return label; } } } } } }); }
 
         // --- Live-Check Function ---
-        function handleLiveCheck(e) { e.preventDefault(); const valueString = liveValueInput.value; const liveValue = parseFloat(valueString.replace(',', '.')); if (isNaN(liveValue)) { alert('Please enter a valid value.'); return; } const deposits = getData(getDepositsKey()); const totalDeposits = deposits.reduce((sum, d) => sum + d.amount, 0); const pl = liveValue - totalDeposits; const plPercent = (totalDeposits === 0) ? 0 : (pl / totalDeposits) * 100; const plSign = pl >= 0 ? '+' : ''; liveTotalDeposits.textContent = `${totalDeposits.toFixed(2)} €`; livePlEuro.textContent = `${plSign}${pl.toFixed(2)} €`; livePlEuro.className = pl >= 0 ? 'profit' : 'loss'; livePlPercent.textContent = `${plSign}${plPercent.toFixed(2)}%`; livePlPercent.className = pl >= 0 ? 'profit' : 'loss'; liveResultsContainer.style.display = 'block'; }
+        function handleLiveCheck(e) { 
+            e.preventDefault(); 
+            const valueString = liveValueInput.value; 
+            const liveValue = parseFloat(valueString.replace(',', '.')); 
+            if (isNaN(liveValue)) { alert('Please enter a valid value.'); return; } 
+            const deposits = getData(getDepositsKey()); 
+            const totalDeposits = deposits.reduce((sum, d) => sum + d.amount, 0); 
+            const pl = liveValue - totalDeposits; 
+            const plPercent = (totalDeposits === 0) ? 0 : (pl / totalDeposits) * 100; 
+            const plSign = pl >= 0 ? '+' : ''; 
+            liveTotalDeposits.textContent = `${totalDeposits.toFixed(2)} €`; 
+            livePlEuro.textContent = `${plSign}${pl.toFixed(2)} €`; 
+            livePlEuro.className = pl >= 0 ? 'profit' : 'loss'; 
+            livePlPercent.textContent = `${plSign}${plPercent.toFixed(2)}%`; 
+            livePlPercent.className = pl >= 0 ? 'profit' : 'loss'; 
+            liveResultsContainer.style.display = 'block'; 
+        }
 
         // --- Login, Register, Logout, Navigation Functions ---
         function showOverlayView(viewId) { initialChoiceView.style.display = 'none'; loginView.style.display = 'none'; registerView.style.display = 'none'; quickLoginView.style.display = 'none'; document.getElementById(viewId).style.display = 'block'; }
         function handleLogin(e) { e.preventDefault(); const username = loginUsernameInput.value.trim(); const password = loginPasswordInput.value; if (!username || !password) return alert('Please enter username and password.'); const passwordKey = getPasswordKey(username); const savedPassword = localStorage.getItem(passwordKey); if (savedPassword === null) alert('User does not exist. Please register.'); else if (savedPassword === password) proceedToApp(username, password); else alert('Incorrect password.'); }
         function handleRegister(e) { e.preventDefault(); const username = registerUsernameInput.value.trim(); const password = registerPasswordInput.value; if (!username || !password) return alert('Please enter username and password.'); const passwordKey = getPasswordKey(username); if (localStorage.getItem(passwordKey) !== null) { alert('Username already exists. Please login.'); } else { localStorage.setItem(passwordKey, password); alert('Registration successful! Logging you in...'); proceedToApp(username, password); } }
         function handleQuickLogin(e) { e.preventDefault(); const lastUser = localStorage.getItem(LAST_USER_KEY); if (!lastUser) return showOverlayView('initial-choice-view'); const password = quickLoginPasswordInput.value; if (!password) return alert('Please enter password.'); const savedPassword = localStorage.getItem(getPasswordKey(lastUser)); if (savedPassword === password) { proceedToApp(lastUser, password); } else { alert('Incorrect password.'); } }
-        function proceedToApp(username, password) { currentUsername = username; localStorage.setItem(LAST_USER_KEY, username); loginOverlay.style.display = 'none'; mainContent.style.display = 'block'; welcomeMessage.textContent = `User: ${username}`; initializeApp(); }
+        
+        function proceedToApp(username, password) { 
+            currentUsername = username; 
+            localStorage.setItem(LAST_USER_KEY, username); 
+            loginOverlay.style.display = 'none'; 
+            mainContent.style.display = 'block'; 
+            welcomeMessage.textContent = `User: ${username}`; 
+            initializeApp(); 
+        }
+        
         function handleLogout() { location.reload(); }
+        
         function initializeApp() {
-            applySavedTheme(); setDefaultDates(); loadDeposits(); refreshAllPerformanceTables();
-            depositForm.addEventListener('submit', handleDepositSubmit); depositTableBody.addEventListener('click', handleDeleteDeposit);
-            snapshotForm.addEventListener('submit', handleSnapshotSubmit); snapshotTableBody.addEventListener('click', handleDeleteSnapshot);
-            liveCheckForm.addEventListener('submit', handleLiveCheck); themeToggle.addEventListener('click', handleThemeToggle); logoutButton.addEventListener('click', handleLogout);
+            applySavedTheme(); 
+            setDefaultDates(); 
+            loadDeposits(); 
+            refreshAllPerformanceTables();
         }
 
         // --- INITIAL LOAD LOGIC ---
@@ -361,6 +429,17 @@
             const lastUser = localStorage.getItem(LAST_USER_KEY);
             loginOverlay.style.display = 'flex';
             applySavedTheme(); 
+            
+            // --- DIE WICHTIGSTE ÄNDERUNG: LISTENER HIER HINZUFÜGEN ---
+            // Damit sind sie immer aktiv, egal ob man eingeloggt ist oder Charts laden.
+            depositForm.addEventListener('submit', handleDepositSubmit); 
+            depositTableBody.addEventListener('click', handleDeleteDeposit);
+            snapshotForm.addEventListener('submit', handleSnapshotSubmit); 
+            snapshotTableBody.addEventListener('click', handleDeleteSnapshot);
+            liveCheckForm.addEventListener('submit', handleLiveCheck); 
+            themeToggle.addEventListener('click', handleThemeToggle); 
+            logoutButton.addEventListener('click', handleLogout);
+            
             if (lastUser) {
                 quickLoginUsernameSpan.textContent = lastUser; showOverlayView('quick-login-view');
                 quickLoginForm.addEventListener('submit', handleQuickLogin);
