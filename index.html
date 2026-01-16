@@ -27,7 +27,6 @@
             --tab-active-border: #3498db;
             --button-bg: #3498db;
             --button-hover-bg: #2980b9;
-            /* Profit/Loss Colors */
             --profit-color: #2ecc71;
             --loss-color: #e74c3c;
         }
@@ -50,7 +49,6 @@
             --tab-active-border: #5dade2;
             --button-bg: #3498db;
             --button-hover-bg: #5dade2;
-            /* Profit/Loss Colors */
             --profit-color: #66BB6A;
             --loss-color: #EF5350;
         }
@@ -150,6 +148,7 @@
         /* Chart Containers */
         .chart-section { max-width: 1400px; margin: 20px auto; background-color: var(--bg-secondary-color); border-radius: 10px; padding: 15px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); }
         .chart-container { position: relative; height: 350px; }
+        .chart-placeholder { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: var(--tab-text); text-align: center; width: 100%; pointer-events: none; }
         @media (min-width: 768px) { .chart-container { height: 400px; } }
 
         /* --- Login Overlay --- */
@@ -207,6 +206,7 @@
             <h2>Portfolio Value (€)</h2>
             <div class="chart-container">
                 <canvas id="performance-chart"></canvas>
+                <div id="chart-msg-1" class="chart-placeholder" style="display: none;">No data yet. Add a 'Performance Snapshot'.</div>
             </div>
         </div>
         
@@ -214,6 +214,7 @@
             <h2>Profit / Loss (€) vs Deposits</h2>
             <div class="chart-container">
                 <canvas id="profit-loss-chart"></canvas>
+                <div id="chart-msg-2" class="chart-placeholder" style="display: none;">No data yet.</div>
             </div>
         </div>
     </div>
@@ -262,6 +263,10 @@
         const yearlyPerformanceBody = document.getElementById('yearly-performance-body');
         const themeToggle = document.getElementById('theme-toggle');
         const htmlElement = document.documentElement;
+        
+        // Chart Placeholders
+        const chartMsg1 = document.getElementById('chart-msg-1');
+        const chartMsg2 = document.getElementById('chart-msg-2');
         
         let performanceChart = null; 
         let plChart = null; 
@@ -321,25 +326,41 @@
                 loadMonthlyPerformance(snapshots, deposits);
                 loadYearlyPerformance(snapshots, deposits);
                 
-                // Nur rendern, wenn Chart.js geladen ist
-                if (typeof Chart !== 'undefined') {
-                    const chartLabels = snapshots.map(s => formatDate(s.date)); 
-                    const portfolioValueData = snapshots.map(s => s.portfolioValue);
-                    renderPerformanceChart(chartLabels, portfolioValueData);
-                    
-                    const plData = []; const plColors = [];
-                    const profitColor = getComputedStyle(document.documentElement).getPropertyValue('--profit-color').trim();
-                    const lossColor = getComputedStyle(document.documentElement).getPropertyValue('--loss-color').trim();
-                    snapshots.forEach(snapshot => { 
-                        const totalDeposits = getTotalDepositsUpTo(snapshot.date, deposits); 
-                        const pl = snapshot.portfolioValue - totalDeposits; 
-                        plData.push(pl); 
-                        plColors.push(pl >= 0 ? profitColor : lossColor); 
-                    });
-                    renderProfitLossChart(chartLabels, plData, plColors);
+                // Show placeholders if no data
+                if (snapshots.length === 0) {
+                    chartMsg1.style.display = 'block';
+                    chartMsg2.style.display = 'block';
+                    if (performanceChart) performanceChart.clear();
+                    if (plChart) plChart.clear();
+                    return;
+                } else {
+                    chartMsg1.style.display = 'none';
+                    chartMsg2.style.display = 'none';
                 }
+
+                // Check if Chart library is loaded
+                if (typeof Chart === 'undefined') {
+                    console.error("Chart.js library not loaded yet.");
+                    return;
+                }
+
+                const chartLabels = snapshots.map(s => formatDate(s.date)); 
+                const portfolioValueData = snapshots.map(s => s.portfolioValue);
+                renderPerformanceChart(chartLabels, portfolioValueData);
+                
+                const plData = []; const plColors = [];
+                const profitColor = getComputedStyle(document.documentElement).getPropertyValue('--profit-color').trim();
+                const lossColor = getComputedStyle(document.documentElement).getPropertyValue('--loss-color').trim();
+                snapshots.forEach(snapshot => { 
+                    const totalDeposits = getTotalDepositsUpTo(snapshot.date, deposits); 
+                    const pl = snapshot.portfolioValue - totalDeposits; 
+                    plData.push(pl); 
+                    plColors.push(pl >= 0 ? profitColor : lossColor); 
+                });
+                renderProfitLossChart(chartLabels, plData, plColors);
+
             } catch (error) {
-                console.error("Fehler beim Laden der Tabellen/Charts:", error);
+                console.error("Error updating charts:", error);
             }
         }
 
@@ -378,8 +399,82 @@
 
         // --- CHART.JS FUNCTIONS ---
         function getChartThemeColors() { const isDarkMode = htmlElement.getAttribute('data-theme') === 'dark'; return { gridColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)', textColor: isDarkMode ? '#e0e0e0' : '#333' }; }
-        function renderPerformanceChart(labels, data) { const ctx = document.getElementById('performance-chart').getContext('2d'); const themeColors = getChartThemeColors(); const gradient = ctx.createLinearGradient(0, 0, 0, 400); const isDarkMode = htmlElement.getAttribute('data-theme') === 'dark'; if (isDarkMode) { gradient.addColorStop(0, 'rgba(56, 173, 107, 0.4)'); gradient.addColorStop(1, 'rgba(56, 173, 107, 0.0)'); } else { gradient.addColorStop(0, 'rgba(102, 187, 106, 0.4)'); gradient.addColorStop(1, 'rgba(102, 187, 106, 0.0)'); } const lineColor = isDarkMode ? '#66BB6A' : '#4CAF50'; if (performanceChart) { performanceChart.destroy(); } const chartType = data.length < 2 ? 'bar' : 'line'; performanceChart = new Chart(ctx, { type: chartType, data: { labels: labels, datasets: [{ label: 'Portfolio Value (€)', data: data, fill: true, backgroundColor: gradient, borderColor: lineColor, borderWidth: 2, tension: 0.4, pointRadius: 6, pointBackgroundColor: lineColor, pointBorderColor: 'white', pointBorderWidth: 2, pointHoverRadius: 8 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: false, ticks: { color: themeColors.textColor }, grid: { color: themeColors.gridColor, drawBorder: false } }, x: { ticks: { color: themeColors.textColor }, grid: { color: themeColors.gridColor, drawBorder: false } } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(context) { let label = context.dataset.label || ''; if (label) { label += ': '; } if (context.parsed.y !== null) { label += new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(context.parsed.y); } return label; } } } } } }); }
-        function renderProfitLossChart(labels, data, colors) { const ctx = document.getElementById('profit-loss-chart').getContext('2d'); const themeColors = getChartThemeColors(); if (plChart) { plChart.destroy(); } plChart = new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ label: 'Profit/Loss (€)', data: data, backgroundColor: colors, borderColor: colors, borderWidth: 1 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { color: themeColors.textColor }, grid: { color: themeColors.gridColor, zeroLineColor: themeColors.textColor } }, x: { ticks: { color: themeColors.textColor }, grid: { display: false, drawBorder: false } } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(context) { let label = context.dataset.label || ''; if (label) { label += ': '; } if (context.parsed.y !== null) { label += new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', signDisplay: 'always' }).format(context.parsed.y); } return label; } } } } } }); }
+        
+        function renderPerformanceChart(labels, data) { 
+            const ctx = document.getElementById('performance-chart').getContext('2d'); 
+            const themeColors = getChartThemeColors(); 
+            // Simple gradient attempt, if fails fallback to solid color
+            let gradient = null;
+            try {
+                gradient = ctx.createLinearGradient(0, 0, 0, 400); 
+                const isDarkMode = htmlElement.getAttribute('data-theme') === 'dark'; 
+                if (isDarkMode) { gradient.addColorStop(0, 'rgba(56, 173, 107, 0.4)'); gradient.addColorStop(1, 'rgba(56, 173, 107, 0.0)'); } 
+                else { gradient.addColorStop(0, 'rgba(102, 187, 106, 0.4)'); gradient.addColorStop(1, 'rgba(102, 187, 106, 0.0)'); }
+            } catch(e) { gradient = 'rgba(102, 187, 106, 0.4)'; }
+            
+            const lineColor = (htmlElement.getAttribute('data-theme') === 'dark') ? '#66BB6A' : '#4CAF50'; 
+            
+            if (performanceChart) { performanceChart.destroy(); } 
+            
+            // Allow chart to draw with just one point
+            const chartType = 'line'; 
+            
+            performanceChart = new Chart(ctx, { 
+                type: chartType, 
+                data: { 
+                    labels: labels, 
+                    datasets: [{ 
+                        label: 'Portfolio Value (€)', 
+                        data: data, 
+                        fill: true, 
+                        backgroundColor: gradient, 
+                        borderColor: lineColor, 
+                        borderWidth: 2, 
+                        tension: 0.4, 
+                        pointRadius: 6 
+                    }] 
+                }, 
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    scales: { 
+                        y: { beginAtZero: false, ticks: { color: themeColors.textColor }, grid: { color: themeColors.gridColor } }, 
+                        x: { ticks: { color: themeColors.textColor }, grid: { color: themeColors.gridColor } } 
+                    }, 
+                    plugins: { legend: { display: false } } 
+                } 
+            }); 
+        }
+
+        function renderProfitLossChart(labels, data, colors) { 
+            const ctx = document.getElementById('profit-loss-chart').getContext('2d'); 
+            const themeColors = getChartThemeColors(); 
+            
+            if (plChart) { plChart.destroy(); } 
+            
+            plChart = new Chart(ctx, { 
+                type: 'bar', 
+                data: { 
+                    labels: labels, 
+                    datasets: [{ 
+                        label: 'Profit/Loss (€)', 
+                        data: data, 
+                        backgroundColor: colors, 
+                        borderColor: colors, 
+                        borderWidth: 1 
+                    }] 
+                }, 
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    scales: { 
+                        y: { ticks: { color: themeColors.textColor }, grid: { color: themeColors.gridColor } }, 
+                        x: { ticks: { color: themeColors.textColor }, grid: { display: false } } 
+                    }, 
+                    plugins: { legend: { display: false } } 
+                } 
+            }); 
+        }
 
         // --- Live-Check Function ---
         function handleLiveCheck(e) { 
@@ -430,8 +525,7 @@
             loginOverlay.style.display = 'flex';
             applySavedTheme(); 
             
-            // --- DIE WICHTIGSTE ÄNDERUNG: LISTENER HIER HINZUFÜGEN ---
-            // Damit sind sie immer aktiv, egal ob man eingeloggt ist oder Charts laden.
+            // --- LISTENERS ---
             depositForm.addEventListener('submit', handleDepositSubmit); 
             depositTableBody.addEventListener('click', handleDeleteDeposit);
             snapshotForm.addEventListener('submit', handleSnapshotSubmit); 
